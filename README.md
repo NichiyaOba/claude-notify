@@ -8,6 +8,7 @@ A tmux plugin that monitors [Claude Code](https://docs.anthropic.com/en/docs/cla
 - Detects response completion via CPU usage state transitions
 - Sends a tmux popup with one-key navigation to the target pane
 - Sends OS notifications (macOS & Linux)
+- Clickable notifications: click to jump to the target pane (requires [terminal-notifier](https://github.com/julienXX/terminal-notifier))
 - Shows the number of active Claude processes in the status bar (e.g. 🤖2)
 
 ## Requirements
@@ -15,6 +16,7 @@ A tmux plugin that monitors [Claude Code](https://docs.anthropic.com/en/docs/cla
 - tmux 3.2+ (for `display-popup` support)
 - [TPM](https://github.com/tmux-plugins/tpm)
 - macOS (uses `osascript`) or Linux with `notify-send`
+- [terminal-notifier](https://github.com/julienXX/terminal-notifier) (optional, for clickable notifications on macOS)
 
 ## Installation
 
@@ -54,6 +56,8 @@ All options are set in `~/.tmux.conf`:
 | `@claude-notify-cpu-threshold` | `3` | CPU% threshold for "processing" detection |
 | `@claude-notify-sound` | `Glass` | Notification sound name (macOS only) |
 | `@claude-notify-macos-notify` | `on` | Enable/disable OS notifications (macOS: `osascript`, Linux: `notify-send`) |
+| `@claude-notify-terminal-notifier` | `on` | Enable/disable terminal-notifier for clickable notifications (falls back to `osascript` if unavailable) |
+| `@claude-notify-terminal-app` | (auto-detect) | Terminal app bundle ID for notification click focus (e.g. `com.mitchellh.ghostty`) |
 
 Example:
 
@@ -61,6 +65,8 @@ Example:
 set -g @claude-notify-cpu-threshold 5
 set -g @claude-notify-sound "Ping"
 set -g @claude-notify-macos-notify off
+set -g @claude-notify-terminal-notifier on
+set -g @claude-notify-terminal-app "com.mitchellh.ghostty"
 ```
 
 ## How It Works
