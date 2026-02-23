@@ -18,7 +18,7 @@ selector_key_default="c"
 
 # Regex pattern for detecting Claude Code permission prompts
 prompt_pattern_option="@claude-notify-prompt-pattern"
-prompt_pattern_default='[0-9]+\. Yes'
+prompt_pattern_default='(Do you want to proceed|[0-9]+\. Yes|Type something\.|❯ [0-9]+\.)'
 
 # Runtime state file directory
 state_dir="${TMPDIR:-/tmp}/tmux-claude-watcher"
