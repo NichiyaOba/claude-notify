@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 #
-# claude-watcher.sh - Claude Code process monitor & notification script
+# claude-watcher.sh - Claude Code process monitor for tmux status bar
 #
 # Periodically invoked from tmux status-right to monitor Claude Code processes
-# running in each pane. Sends popup + OS notification on response completion
-# (processing → waiting/exited).
+# running in each pane. Displays per-process status in the status bar.
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -13,8 +12,9 @@ source "$CURRENT_DIR/variables.sh"
 
 # --- Load configuration ---
 CPU_THRESHOLD=$(get_tmux_option "$cpu_threshold_option" "$cpu_threshold_default")
-SOUND=$(get_tmux_option "$sound_option" "$sound_default")
-MACOS_NOTIFY=$(get_tmux_option "$macos_notify_option" "$macos_notify_default")
+DISPLAY_TIMEOUT=$(get_tmux_option "$display_timeout_option" "$display_timeout_default")
+MAX_NAME_LENGTH=$(get_tmux_option "$max_name_length_option" "$max_name_length_default")
+PROMPT_PATTERN=$(get_tmux_option "$prompt_pattern_option" "$prompt_pattern_default")
 
 mkdir -p "$state_dir"
 
@@ -51,79 +51,39 @@ get_cpu_usage() {
 	fi
 }
 
-# Derive a project name from the pane's working directory.
+# Derive a project name from the pane's working directory (truncated).
 get_project_name() {
 	local pane_path="$1"
-	basename "$pane_path"
-}
-
-# Send an OS notification (macOS or Linux).
-send_notification() {
-	local title="$1"
-	local message="$2"
-	if [ "$MACOS_NOTIFY" = "on" ]; then
-		if command -v osascript >/dev/null 2>&1; then
-			# Escape double quotes to prevent osascript injection
-			local safe_title="${title//\"/\\\"}"
-			local safe_message="${message//\"/\\\"}"
-			osascript -e "display notification \"$safe_message\" with title \"$safe_title\" sound name \"$SOUND\"" 2>/dev/null &
-		elif command -v notify-send >/dev/null 2>&1; then
-			notify-send "$title" "$message" 2>/dev/null &
-		fi
+	local name
+	name=$(basename "$pane_path")
+	# プロジェクト名を最大文字数に切り詰め
+	if [ "${#name}" -gt "$MAX_NAME_LENGTH" ]; then
+		name="${name:0:$MAX_NAME_LENGTH}"
 	fi
+	echo "$name"
 }
 
-# Show a tmux popup notification (Enter to jump, Esc to dismiss).
-send_tmux_popup() {
-	local target_pane="$1"
-	local session="$2"
-	local window="$3"
-	local pane_index="$4"
-	local project="$5"
-	local event_type="$6"  # "completed" or "exited"
-
-	local display_text
-	if [ "$event_type" = "exited" ]; then
-		display_text="Claude Code exited"
-	else
-		display_text="Claude Code response completed"
-	fi
-
-	# Escape single quotes for safe shell embedding
-	local sq="'"
-	project="${project//$sq/$sq\\$sq$sq}"
-	session="${session//$sq/$sq\\$sq$sq}"
-
-	tmux display-popup -E -T " Claude Notify " -w 50 -h 8 \
-		"printf '\n  📍 %s (%s:%s.%s)\n\n  %s\n\n  Enter: Jump to pane  |  Esc: Dismiss\n' \
-		'$project' '$session' '$window' '$pane_index' '$display_text'; \
-		read -rsn1 key; \
-		if [ \"\$key\" = '' ]; then \
-			tmux select-window -t '$session:$window' && tmux select-pane -t '$pane_index'; \
-		fi"
+# Save metadata (project name and location) for a pane.
+save_meta() {
+	local local_id="$1"
+	local project="$2"
+	local location="$3"
+	echo "$project $location" > "$state_dir/${local_id}.meta"
 }
 
-# Dispatch notifications for a pane event.
-notify() {
+# Record the timestamp when a process completes or exits.
+save_done_at() {
+	local local_id="$1"
+	date +%s > "$state_dir/${local_id}.done_at"
+}
+
+# Check if the pane is showing a Claude Code permission prompt.
+# Args: local_id (numeric pane ID without %)
+is_prompting() {
 	local pane_id="$1"
-	local session="$2"
-	local window="$3"
-	local pane_index="$4"
-	local pane_path="$5"
-	local event_type="$6"
-
-	local project
-	project=$(get_project_name "$pane_path")
-
-	# OS notification
-	if [ "$event_type" = "exited" ]; then
-		send_notification "Claude Code - $project" "Process exited ($session:$window.$pane_index)"
-	else
-		send_notification "Claude Code - $project" "Response completed ($session:$window.$pane_index)"
-	fi
-
-	# tmux popup (run in background to avoid blocking the monitor)
-	send_tmux_popup "$pane_id" "$session" "$window" "$pane_index" "$project" "$event_type" &
+	local content
+	content=$(tmux capture-pane -t "%${pane_id}" -p 2>/dev/null) || return 1
+	echo "$content" | grep -qE "$PROMPT_PATTERN"
 }
 
 # --- Main monitor loop ---
@@ -134,10 +94,15 @@ while IFS=$'\t' read -r pane_id pane_pid session_name window_index pane_index pa
 	# State files for this pane (pane_id is like %0, %1)
 	local_id="${pane_id//%/}"
 	state_file="$state_dir/${local_id}.state"
-	notified_file="$state_dir/${local_id}.notified"
+	meta_file="$state_dir/${local_id}.meta"
+	done_file="$state_dir/${local_id}.done_at"
 
 	# Look for a Claude process
 	claude_pid=$(find_claude_pid "$pane_pid")
+
+	# Derive display info
+	project=$(get_project_name "$pane_path")
+	location="${session_name}:${window_index}.${pane_index}"
 
 	if [ -n "$claude_pid" ]; then
 		# Claude is running
@@ -151,59 +116,104 @@ while IFS=$'\t' read -r pane_id pane_pid session_name window_index pane_index pa
 		if [ "$cpu" -gt "$CPU_THRESHOLD" ] 2>/dev/null; then
 			# Processing state
 			echo "processing" > "$state_file"
-			# Reset notification flag
-			rm -f "$notified_file"
+			save_meta "$local_id" "$project" "$location"
+			rm -f "$done_file"
 		else
 			# CPU below threshold
 			prev_state=""
 			[ -f "$state_file" ] && prev_state=$(<"$state_file")
 
-			if [ "$prev_state" = "processing" ]; then
-				# processing → first low-CPU tick: transition to low_once
-				echo "low_once" > "$state_file"
-			elif [ "$prev_state" = "low_once" ]; then
-				# Two consecutive low-CPU ticks → waiting (response completed)
-				echo "waiting" > "$state_file"
-				if [ ! -f "$notified_file" ]; then
-					notify "$pane_id" "$session_name" "$window_index" "$pane_index" "$pane_path" "completed"
-					touch "$notified_file"
-				fi
-			fi
-			# If prev_state is waiting or empty, do nothing (initial state or already notified)
+			case "$prev_state" in
+				processing)
+					if is_prompting "$local_id"; then
+						echo "prompting" > "$state_file"
+					else
+						echo "low_once" > "$state_file"
+					fi
+					save_meta "$local_id" "$project" "$location"
+					;;
+				low_once)
+					if is_prompting "$local_id"; then
+						echo "prompting" > "$state_file"
+					else
+						echo "waiting" > "$state_file"
+						save_done_at "$local_id"
+					fi
+					save_meta "$local_id" "$project" "$location"
+					;;
+				prompting)
+					if ! is_prompting "$local_id"; then
+						# プロンプトが消えた（ユーザーが応答した）→ デバウンスへ
+						echo "low_once" > "$state_file"
+						save_meta "$local_id" "$project" "$location"
+					fi
+					;;
+			esac
 		fi
 	else
 		# No Claude process found
 		prev_state=""
 		[ -f "$state_file" ] && prev_state=$(<"$state_file")
 
-		if [ "$prev_state" = "processing" ] || [ "$prev_state" = "low_once" ]; then
+		if [ "$prev_state" = "processing" ] || [ "$prev_state" = "low_once" ] || [ "$prev_state" = "prompting" ]; then
 			# processing/low_once → exited (process disappeared)
 			echo "exited" > "$state_file"
-			if [ ! -f "$notified_file" ]; then
-				notify "$pane_id" "$session_name" "$window_index" "$pane_index" "$pane_path" "exited"
-				touch "$notified_file"
-			fi
+			save_meta "$local_id" "$project" "$location"
+			save_done_at "$local_id"
 		elif [ "$prev_state" = "waiting" ] || [ "$prev_state" = "exited" ]; then
-			# Already notified — clean up state files
-			rm -f "$state_file" "$notified_file"
+			# タイムアウト済みでなければ保持（ステータスバー出力で処理）
+			:
+		else
+			# prev_state is empty — pane without Claude, clean up stale files
+			rm -f "$state_file" "$meta_file" "$done_file"
 		fi
-		# If prev_state is empty, do nothing (pane without Claude)
 	fi
 done < <(tmux list-panes -a -F '#{pane_id}	#{pane_pid}	#{session_name}	#{window_index}	#{pane_index}	#{pane_current_path}')
 
 # --- Status bar output ---
-# Count panes currently in processing state
-processing_count=0
+# 全ペインの状態を収集して個別表示
+output=""
+now=$(date +%s)
 for sf in "$state_dir"/*.state; do
 	[ -f "$sf" ] || continue
+	id=$(basename "$sf" .state)
 	state=$(<"$sf")
-	if [ "$state" = "processing" ] || [ "$state" = "low_once" ]; then
-		processing_count=$((processing_count + 1))
-	fi
+	meta_file="$state_dir/${id}.meta"
+	done_file="$state_dir/${id}.done_at"
+
+	[ -f "$meta_file" ] || continue
+	read -r project location < "$meta_file"
+
+	case "$state" in
+		processing|low_once)
+			output+="🤖${project}(${location}) "
+			;;
+		prompting)
+			output+="💬${project}(${location}) "
+			;;
+		waiting)
+			# タイムアウトチェック
+			if [ -f "$done_file" ]; then
+				done_at=$(<"$done_file")
+				if [ $((now - done_at)) -gt "$DISPLAY_TIMEOUT" ]; then
+					rm -f "$sf" "$meta_file" "$done_file"
+					continue
+				fi
+			fi
+			output+="✅${project}(${location}) "
+			;;
+		exited)
+			if [ -f "$done_file" ]; then
+				done_at=$(<"$done_file")
+				if [ $((now - done_at)) -gt "$DISPLAY_TIMEOUT" ]; then
+					rm -f "$sf" "$meta_file" "$done_file"
+					continue
+				fi
+			fi
+			output+="💀${project}(${location}) "
+			;;
+	esac
 done
 
-if [ "$processing_count" -gt 0 ]; then
-	echo "🤖${processing_count}"
-else
-	echo ""
-fi
+# 末尾の空白を除去して出力
+echo "${output% }"
