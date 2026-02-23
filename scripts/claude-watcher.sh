@@ -82,8 +82,8 @@ save_done_at() {
 is_prompting() {
 	local pane_id="$1"
 	local content
-	content=$(tmux capture-pane -t "%${pane_id}" -p 2>/dev/null) || return 1
-	echo "$content" | grep -qE "$PROMPT_PATTERN"
+	content=$(tmux capture-pane -t "%${pane_id}" -p -J -S -30 2>/dev/null) || return 1
+	echo "$content" | tail -n 20 | grep -qE "$PROMPT_PATTERN"
 }
 
 # --- Main monitor loop ---
@@ -170,13 +170,29 @@ while IFS=$'\t' read -r pane_id pane_pid session_name window_index pane_index pa
 	fi
 done < <(tmux list-panes -a -F '#{pane_id}	#{pane_pid}	#{session_name}	#{window_index}	#{pane_index}	#{pane_current_path}')
 
+# --- Cleanup orphaned state files ---
+# 存在しないペインのステートファイルを削除
+existing_panes=$(tmux list-panes -a -F '#{pane_id}' | sed 's/^%//')
+for sf in "$state_dir"/*.state; do
+	[ -f "$sf" ] || continue
+	id=$(basename "$sf" .state)
+	if ! echo "$existing_panes" | grep -qx "$id"; then
+		rm -f "$state_dir/${id}.state" "$state_dir/${id}.meta" "$state_dir/${id}.done_at" "$state_dir/${id}.notified"
+	fi
+done
+
 # --- Status bar output ---
+# 現在アクティブなペインは自分で見えるので表示しない
+active_pane=$(tmux display-message -p '#{pane_id}' 2>/dev/null | sed 's/^%//')
+
 # 全ペインの状態を収集して個別表示
 output=""
 now=$(date +%s)
 for sf in "$state_dir"/*.state; do
 	[ -f "$sf" ] || continue
 	id=$(basename "$sf" .state)
+	# アクティブペインはスキップ
+	[ "$id" = "$active_pane" ] && continue
 	state=$(<"$sf")
 	meta_file="$state_dir/${id}.meta"
 	done_file="$state_dir/${id}.done_at"
