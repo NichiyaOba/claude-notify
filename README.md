@@ -7,7 +7,7 @@ A tmux plugin that monitors [Claude Code](https://docs.anthropic.com/en/docs/cla
 - Scans all tmux panes for running Claude Code processes
 - Detects response completion via CPU usage state transitions
 - Detects permission prompts (tool approval requests) and shows distinct status
-- Quick navigation to Claude panes via `prefix + c` selector
+- Quick navigation to Claude panes via `prefix + C` selector
 - Displays per-process status in the status bar with project name and pane location
 - Completed/exited indicators auto-clear after a configurable timeout
 
@@ -28,11 +28,13 @@ Each entry shows `icon` + `project_name` + `(session:window.pane)`.
 
 ### Claude Process Selector
 
-Press `prefix + c` to open the Claude process selector. Behavior depends on the number of active Claude processes:
+Press `prefix + C` (Shift+c) to open the Claude process selector. Behavior depends on the number of active Claude processes:
 
 - **0 processes**: displays a message
 - **1 process**: navigates directly to that pane
 - **2+ processes**: opens an interactive selector (fzf popup if available, otherwise tmux display-menu)
+
+> **Note**: デフォルトキーは `C`（Shift+c）です。tmux 標準の `prefix + c`（新しいウィンドウ作成）と競合しないようにしています。変更したい場合は `@claude-notify-selector-key` を設定してください。
 
 ## Requirements
 
@@ -77,7 +79,7 @@ All options are set in `~/.tmux.conf`:
 | `@claude-notify-cpu-threshold` | `3` | CPU% threshold for "processing" detection |
 | `@claude-notify-display-timeout` | `30` | Seconds to keep completed/exited entries visible |
 | `@claude-notify-max-name-length` | `10` | Maximum characters for project name display |
-| `@claude-notify-selector-key` | `c` | Key binding for Claude process selector (with prefix) |
+| `@claude-notify-selector-key` | `C` | Key binding for Claude process selector (with prefix) |
 | `@claude-notify-prompt-pattern` | `[0-9]+\. Yes` | Regex pattern for detecting permission prompts |
 
 Example:

@@ -14,7 +14,7 @@ max_name_length_default="10"
 
 # Key binding for Claude process selector
 selector_key_option="@claude-notify-selector-key"
-selector_key_default="c"
+selector_key_default="C"
 
 # Regex pattern for detecting Claude Code permission prompts
 prompt_pattern_option="@claude-notify-prompt-pattern"
