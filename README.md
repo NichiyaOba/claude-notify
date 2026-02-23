@@ -1,4 +1,4 @@
-# claude-notify
+# claude-map
 
 A tmux plugin that monitors [Claude Code](https://docs.anthropic.com/en/docs/claude-code) processes and displays their status in the tmux status bar.
 
@@ -34,7 +34,7 @@ Press `prefix + C` (Shift+c) to open the Claude process selector. Behavior depen
 - **1 process**: navigates directly to that pane
 - **2+ processes**: opens an interactive selector (fzf popup if available, otherwise tmux display-menu)
 
-> **Note**: デフォルトキーは `C`（Shift+c）です。tmux 標準の `prefix + c`（新しいウィンドウ作成）と競合しないようにしています。変更したい場合は `@claude-notify-selector-key` を設定してください。
+> **Note**: デフォルトキーは `C`（Shift+c）です。tmux 標準の `prefix + c`（新しいウィンドウ作成）と競合しないようにしています。変更したい場合は `@claude-map-selector-key` を設定してください。
 
 ## Requirements
 
@@ -48,7 +48,7 @@ Press `prefix + C` (Shift+c) to open the Claude process selector. Behavior depen
 Add to `~/.tmux.conf`:
 
 ```bash
-set -g @plugin 'NichiyaOba/claude-notify'
+set -g @plugin 'NichiyaOba/claude-map'
 ```
 
 Reload tmux and install:
@@ -61,13 +61,13 @@ tmux source-file ~/.tmux.conf
 ### Manual
 
 ```bash
-git clone https://github.com/NichiyaOba/claude-notify.git ~/.tmux/plugins/claude-notify
+git clone https://github.com/NichiyaOba/claude-map.git ~/.tmux/plugins/claude-map
 ```
 
 Add to `~/.tmux.conf`:
 
 ```bash
-run-shell ~/.tmux/plugins/claude-notify/claude-notify.tmux
+run-shell ~/.tmux/plugins/claude-map/claude-map.tmux
 ```
 
 ## Configuration
@@ -76,18 +76,18 @@ All options are set in `~/.tmux.conf`:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `@claude-notify-cpu-threshold` | `3` | CPU% threshold for "processing" detection |
-| `@claude-notify-display-timeout` | `30` | Seconds to keep completed/exited entries visible |
-| `@claude-notify-max-name-length` | `10` | Maximum characters for project name display |
-| `@claude-notify-selector-key` | `C` | Key binding for Claude process selector (with prefix) |
-| `@claude-notify-prompt-pattern` | `[0-9]+\. Yes` | Regex pattern for detecting permission prompts |
+| `@claude-map-cpu-threshold` | `3` | CPU% threshold for "processing" detection |
+| `@claude-map-display-timeout` | `30` | Seconds to keep completed/exited entries visible |
+| `@claude-map-max-name-length` | `10` | Maximum characters for project name display |
+| `@claude-map-selector-key` | `C` | Key binding for Claude process selector (with prefix) |
+| `@claude-map-prompt-pattern` | `[0-9]+\. Yes` | Regex pattern for detecting permission prompts |
 
 Example:
 
 ```bash
-set -g @claude-notify-cpu-threshold 5
-set -g @claude-notify-display-timeout 60
-set -g @claude-notify-max-name-length 15
+set -g @claude-map-cpu-threshold 5
+set -g @claude-map-display-timeout 60
+set -g @claude-map-max-name-length 15
 ```
 
 ### Status Bar Width
@@ -131,7 +131,7 @@ exited 💀   → auto-clears after timeout
 
 Completed and exited entries are automatically removed from the status bar after the configured timeout (default: 30 seconds).
 
-Permission prompt detection uses `tmux capture-pane` to scan the pane content for patterns matching Claude Code's tool approval UI. The default pattern (`[0-9]+\. Yes`) matches numbered choice options. Override with `@claude-notify-prompt-pattern` if needed.
+Permission prompt detection uses `tmux capture-pane` to scan the pane content for patterns matching Claude Code's tool approval UI. The default pattern (`[0-9]+\. Yes`) matches numbered choice options. Override with `@claude-map-prompt-pattern` if needed.
 
 ## License
 

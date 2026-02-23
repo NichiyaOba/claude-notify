@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# claude-notify.tmux - TPM entry point
+# claude-map.tmux - TPM entry point
 #
-# A tmux plugin that monitors Claude Code and notifies on response completion.
+# A tmux plugin that monitors Claude Code and displays status in the tmux status bar.
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
