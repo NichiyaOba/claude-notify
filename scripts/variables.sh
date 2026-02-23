@@ -12,5 +12,13 @@ sound_default="Glass"
 macos_notify_option="@claude-notify-macos-notify"
 macos_notify_default="on"
 
+# terminal-notifier の使用 (on/off)。未インストール時は osascript にフォールバック
+terminal_notifier_option="@claude-notify-terminal-notifier"
+terminal_notifier_default="on"
+
+# ターミナルアプリのバンドルID（通知クリック時にフォーカスするアプリ。空=自動検出）
+terminal_app_option="@claude-notify-terminal-app"
+terminal_app_default=""
+
 # Runtime state file directory
 state_dir="${TMPDIR:-/tmp}/tmux-claude-watcher"

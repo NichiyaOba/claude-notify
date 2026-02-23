@@ -15,6 +15,7 @@ source "$CURRENT_DIR/variables.sh"
 CPU_THRESHOLD=$(get_tmux_option "$cpu_threshold_option" "$cpu_threshold_default")
 SOUND=$(get_tmux_option "$sound_option" "$sound_default")
 MACOS_NOTIFY=$(get_tmux_option "$macos_notify_option" "$macos_notify_default")
+USE_TERMINAL_NOTIFIER=$(get_tmux_option "$terminal_notifier_option" "$terminal_notifier_default")
 
 mkdir -p "$state_dir"
 
@@ -58,18 +59,40 @@ get_project_name() {
 }
 
 # Send an OS notification (macOS or Linux).
+# Args: title, message, session, window, pane_index
 send_notification() {
 	local title="$1"
 	local message="$2"
-	if [ "$MACOS_NOTIFY" = "on" ]; then
-		if command -v osascript >/dev/null 2>&1; then
-			# Escape double quotes to prevent osascript injection
+	local session="$3"
+	local window="$4"
+	local pane_index="$5"
+
+	[ "$MACOS_NOTIFY" = "on" ] || return
+
+	if [[ "$OSTYPE" == darwin* ]]; then
+		if [ "$USE_TERMINAL_NOTIFIER" = "on" ] && command -v terminal-notifier >/dev/null 2>&1; then
+			local tmux_path terminal_app navigate_cmd
+			tmux_path=$(command -v tmux)
+			terminal_app=$(get_tmux_option "$terminal_app_option" "com.apple.Terminal")
+
+			navigate_cmd="${tmux_path} select-window -t '${session}:${window}' && ${tmux_path} select-pane -t '${pane_index}'"
+
+			terminal-notifier \
+				-title "$title" \
+				-message "$message" \
+				-sound "$SOUND" \
+				-execute "$navigate_cmd" \
+				-activate "$terminal_app" \
+				-group "claude-notify-${session}-${window}-${pane_index}" \
+				2>/dev/null &
+		else
+			# フォールバック: osascript（クリック非対応）
 			local safe_title="${title//\"/\\\"}"
 			local safe_message="${message//\"/\\\"}"
 			osascript -e "display notification \"$safe_message\" with title \"$safe_title\" sound name \"$SOUND\"" 2>/dev/null &
-		elif command -v notify-send >/dev/null 2>&1; then
-			notify-send "$title" "$message" 2>/dev/null &
 		fi
+	elif command -v notify-send >/dev/null 2>&1; then
+		notify-send "$title" "$message" 2>/dev/null &
 	fi
 }
 
@@ -117,9 +140,11 @@ notify() {
 
 	# OS notification
 	if [ "$event_type" = "exited" ]; then
-		send_notification "Claude Code - $project" "Process exited ($session:$window.$pane_index)"
+		send_notification "Claude Code - $project" "Process exited ($session:$window.$pane_index)" \
+			"$session" "$window" "$pane_index"
 	else
-		send_notification "Claude Code - $project" "Response completed ($session:$window.$pane_index)"
+		send_notification "Claude Code - $project" "Response completed ($session:$window.$pane_index)" \
+			"$session" "$window" "$pane_index"
 	fi
 
 	# tmux popup (run in background to avoid blocking the monitor)

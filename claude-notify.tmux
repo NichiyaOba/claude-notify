@@ -30,7 +30,31 @@ set_status_interval() {
 	fi
 }
 
+detect_and_set_terminal_app() {
+	local current
+	current="$(get_tmux_option "$terminal_app_option" "")"
+	[ -n "$current" ] && return  # ユーザーが手動設定済み
+
+	local client_pid terminal_pid bundle_id
+	client_pid=$(tmux display-message -p '#{client_pid}' 2>/dev/null)
+	if [ -n "$client_pid" ]; then
+		terminal_pid=$(ps -o ppid= -p "$client_pid" 2>/dev/null | tr -d ' ')
+		if [ -n "$terminal_pid" ]; then
+			local app_name
+			app_name=$(ps -o comm= -p "$terminal_pid" 2>/dev/null)
+			case "$app_name" in
+				*ghostty*) bundle_id="com.mitchellh.ghostty" ;;
+				*iTerm*)   bundle_id="com.googlecode.iterm2" ;;
+				*Terminal*) bundle_id="com.apple.Terminal" ;;
+				*warp*)    bundle_id="dev.warp.Warp-Stable" ;;
+			esac
+		fi
+	fi
+	set_tmux_option "$terminal_app_option" "${bundle_id:-com.apple.Terminal}"
+}
+
 main() {
+	detect_and_set_terminal_app
 	add_watcher_to_status_right
 	set_status_interval
 }
