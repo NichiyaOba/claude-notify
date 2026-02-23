@@ -12,6 +12,10 @@ display_timeout_default="30"
 max_name_length_option="@claude-notify-max-name-length"
 max_name_length_default="10"
 
+# Key binding for Claude process selector
+selector_key_option="@claude-notify-selector-key"
+selector_key_default="c"
+
 # Regex pattern for detecting Claude Code permission prompts
 prompt_pattern_option="@claude-notify-prompt-pattern"
 prompt_pattern_default='[0-9]+\. Yes'

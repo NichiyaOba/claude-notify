@@ -30,8 +30,15 @@ set_status_interval() {
 	fi
 }
 
+setup_keybinding() {
+	local selector_key
+	selector_key=$(get_tmux_option "$selector_key_option" "$selector_key_default")
+	tmux bind-key "$selector_key" run-shell "$CURRENT_DIR/scripts/claude-selector.sh"
+}
+
 main() {
 	add_watcher_to_status_right
 	set_status_interval
+	setup_keybinding
 }
 main
