@@ -1,20 +1,32 @@
 # claude-notify
 
-A tmux plugin that monitors [Claude Code](https://docs.anthropic.com/en/docs/claude-code) processes and sends notifications when responses complete.
+A tmux plugin that monitors [Claude Code](https://docs.anthropic.com/en/docs/claude-code) processes and displays their status in the tmux status bar.
 
 ## Features
 
 - Scans all tmux panes for running Claude Code processes
 - Detects response completion via CPU usage state transitions
-- Sends a tmux popup with one-key navigation to the target pane
-- Sends OS notifications (macOS & Linux)
-- Shows the number of active Claude processes in the status bar (e.g. 🤖2)
+- Displays per-process status in the status bar with project name and pane location
+- Completed/exited indicators auto-clear after a configurable timeout
+
+### Status Bar Format
+
+```
+🤖myapp(0:1.0) ✅api(0:2.1) 💀tools(1:0.0)
+```
+
+| Icon | Meaning |
+|------|---------|
+| 🤖 | Processing (CPU active) |
+| ✅ | Completed (auto-clears after timeout) |
+| 💀 | Exited unexpectedly (auto-clears after timeout) |
+
+Each entry shows `icon` + `project_name` + `(session:window.pane)`.
 
 ## Requirements
 
-- tmux 3.2+ (for `display-popup` support)
+- tmux 3.0+
 - [TPM](https://github.com/tmux-plugins/tpm)
-- macOS (uses `osascript`) or Linux with `notify-send`
 
 ## Installation
 
@@ -52,15 +64,23 @@ All options are set in `~/.tmux.conf`:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `@claude-notify-cpu-threshold` | `3` | CPU% threshold for "processing" detection |
-| `@claude-notify-sound` | `Glass` | Notification sound name (macOS only) |
-| `@claude-notify-macos-notify` | `on` | Enable/disable OS notifications (macOS: `osascript`, Linux: `notify-send`) |
+| `@claude-notify-display-timeout` | `30` | Seconds to keep completed/exited entries visible |
+| `@claude-notify-max-name-length` | `10` | Maximum characters for project name display |
 
 Example:
 
 ```bash
 set -g @claude-notify-cpu-threshold 5
-set -g @claude-notify-sound "Ping"
-set -g @claude-notify-macos-notify off
+set -g @claude-notify-display-timeout 60
+set -g @claude-notify-max-name-length 15
+```
+
+### Status Bar Width
+
+The default `status-right-length` (40 characters) may be too narrow when monitoring multiple Claude processes. Increase it to ensure all entries are visible:
+
+```bash
+set -g status-right-length 120
 ```
 
 ## How It Works
@@ -74,19 +94,21 @@ The watcher script runs on each tmux status refresh (every 5 seconds) and tracks
      │                           [CPU ≤ threshold]     [process exits]
      │                                   ↓                     ↓
      │                               low_once               exited
-     │                                   │            (exit notification)
+     │                                   │                 💀 (auto-clear)
      │                           [CPU ≤ threshold]            │
      │                                   ↓                    │
      │                               waiting                  │
-     │                        (completion notification)       │
+     │                            ✅ (auto-clear)             │
      │                                   │                    │
-     └─────────[next scan: cleanup]──────┴────────────────────┘
+     └────────[timeout: cleanup]─────────┴────────────────────┘
 ```
 
-- **processing**: Claude is actively generating a response (CPU > threshold)
+- **processing**: Claude is actively generating a response (CPU > threshold) — displayed as 🤖
 - **low_once**: CPU dropped below threshold once — debounce tick to prevent false positives
-- **waiting**: CPU stayed low for 2 consecutive ticks — completion notification sent
-- **exited**: Claude process disappeared while processing — exit notification sent
+- **waiting**: CPU stayed low for 2 consecutive ticks — displayed as ✅
+- **exited**: Claude process disappeared while processing — displayed as 💀
+
+Completed and exited entries are automatically removed from the status bar after the configured timeout (default: 30 seconds).
 
 ## License
 

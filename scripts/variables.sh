@@ -4,13 +4,13 @@
 cpu_threshold_option="@claude-notify-cpu-threshold"
 cpu_threshold_default="3"
 
-# Notification sound (macOS only)
-sound_option="@claude-notify-sound"
-sound_default="Glass"
+# How long (seconds) to keep completed/exited entries visible in the status bar
+display_timeout_option="@claude-notify-display-timeout"
+display_timeout_default="30"
 
-# Enable/disable OS notifications
-macos_notify_option="@claude-notify-macos-notify"
-macos_notify_default="on"
+# Maximum characters for project name display
+max_name_length_option="@claude-notify-max-name-length"
+max_name_length_default="10"
 
 # Runtime state file directory
 state_dir="${TMPDIR:-/tmp}/tmux-claude-watcher"
