@@ -82,8 +82,8 @@ save_done_at() {
 is_prompting() {
 	local pane_id="$1"
 	local content
-	content=$(tmux capture-pane -t "%${pane_id}" -p 2>/dev/null) || return 1
-	echo "$content" | grep -qE "$PROMPT_PATTERN"
+	content=$(tmux capture-pane -t "%${pane_id}" -p -J -S -30 2>/dev/null) || return 1
+	echo "$content" | tail -n 20 | grep -qE "$PROMPT_PATTERN"
 }
 
 # --- Main monitor loop ---
