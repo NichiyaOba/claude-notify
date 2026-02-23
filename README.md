@@ -6,18 +6,20 @@ A tmux plugin that monitors [Claude Code](https://docs.anthropic.com/en/docs/cla
 
 - Scans all tmux panes for running Claude Code processes
 - Detects response completion via CPU usage state transitions
+- Detects permission prompts (tool approval requests) and shows distinct status
 - Displays per-process status in the status bar with project name and pane location
 - Completed/exited indicators auto-clear after a configurable timeout
 
 ### Status Bar Format
 
 ```
-🤖myapp(0:1.0) ✅api(0:2.1) 💀tools(1:0.0)
+🤖myapp(0:1.0) 💬api(0:2.1) ✅tools(1:0.0)
 ```
 
 | Icon | Meaning |
 |------|---------|
 | 🤖 | Processing (CPU active) |
+| 💬 | Awaiting permission (user action required) |
 | ✅ | Completed (auto-clears after timeout) |
 | 💀 | Exited unexpectedly (auto-clears after timeout) |
 
@@ -66,6 +68,7 @@ All options are set in `~/.tmux.conf`:
 | `@claude-notify-cpu-threshold` | `3` | CPU% threshold for "processing" detection |
 | `@claude-notify-display-timeout` | `30` | Seconds to keep completed/exited entries visible |
 | `@claude-notify-max-name-length` | `10` | Maximum characters for project name display |
+| `@claude-notify-prompt-pattern` | `[0-9]+\. Yes` | Regex pattern for detecting permission prompts |
 
 Example:
 
@@ -88,27 +91,35 @@ set -g status-right-length 120
 The watcher script runs on each tmux status refresh (every 5 seconds) and tracks Claude Code processes through a simple state machine:
 
 ```
-(no state) ──[Claude found, CPU > threshold]──→ processing
-     ↑                                             │
-     │                                   ┌─────────┴──────────┐
-     │                           [CPU ≤ threshold]     [process exits]
-     │                                   ↓                     ↓
-     │                               low_once               exited
-     │                                   │                 💀 (auto-clear)
-     │                           [CPU ≤ threshold]            │
-     │                                   ↓                    │
-     │                               waiting                  │
-     │                            ✅ (auto-clear)             │
-     │                                   │                    │
-     └────────[timeout: cleanup]─────────┴────────────────────┘
+processing 🤖
+  ├── CPU ≤ threshold + prompt detected → prompting 💬
+  ├── CPU ≤ threshold (1st tick)        → low_once 🤖
+  └── process exits                     → exited 💀
+
+prompting 💬
+  ├── CPU > threshold                   → processing 🤖
+  ├── prompt disappears                 → low_once 🤖
+  └── process exits                     → exited 💀
+
+low_once 🤖
+  ├── CPU > threshold                   → processing 🤖
+  ├── CPU ≤ threshold + prompt detected → prompting 💬
+  ├── CPU ≤ threshold (2nd tick)        → waiting ✅
+  └── process exits                     → exited 💀
+
+waiting ✅  → auto-clears after timeout
+exited 💀   → auto-clears after timeout
 ```
 
 - **processing**: Claude is actively generating a response (CPU > threshold) — displayed as 🤖
+- **prompting**: Claude is waiting for permission approval (tool execution) — displayed as 💬
 - **low_once**: CPU dropped below threshold once — debounce tick to prevent false positives
 - **waiting**: CPU stayed low for 2 consecutive ticks — displayed as ✅
 - **exited**: Claude process disappeared while processing — displayed as 💀
 
 Completed and exited entries are automatically removed from the status bar after the configured timeout (default: 30 seconds).
+
+Permission prompt detection uses `tmux capture-pane` to scan the pane content for patterns matching Claude Code's tool approval UI. The default pattern (`[0-9]+\. Yes`) matches numbered choice options. Override with `@claude-notify-prompt-pattern` if needed.
 
 ## License
 

@@ -12,5 +12,9 @@ display_timeout_default="30"
 max_name_length_option="@claude-notify-max-name-length"
 max_name_length_default="10"
 
+# Regex pattern for detecting Claude Code permission prompts
+prompt_pattern_option="@claude-notify-prompt-pattern"
+prompt_pattern_default='[0-9]+\. Yes'
+
 # Runtime state file directory
 state_dir="${TMPDIR:-/tmp}/tmux-claude-watcher"

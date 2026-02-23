@@ -14,6 +14,7 @@ source "$CURRENT_DIR/variables.sh"
 CPU_THRESHOLD=$(get_tmux_option "$cpu_threshold_option" "$cpu_threshold_default")
 DISPLAY_TIMEOUT=$(get_tmux_option "$display_timeout_option" "$display_timeout_default")
 MAX_NAME_LENGTH=$(get_tmux_option "$max_name_length_option" "$max_name_length_default")
+PROMPT_PATTERN=$(get_tmux_option "$prompt_pattern_option" "$prompt_pattern_default")
 
 mkdir -p "$state_dir"
 
@@ -76,6 +77,15 @@ save_done_at() {
 	date +%s > "$state_dir/${local_id}.done_at"
 }
 
+# Check if the pane is showing a Claude Code permission prompt.
+# Args: local_id (numeric pane ID without %)
+is_prompting() {
+	local pane_id="$1"
+	local content
+	content=$(tmux capture-pane -t "%${pane_id}" -p 2>/dev/null) || return 1
+	echo "$content" | grep -qE "$PROMPT_PATTERN"
+}
+
 # --- Main monitor loop ---
 
 # Scan all panes.
@@ -113,24 +123,39 @@ while IFS=$'\t' read -r pane_id pane_pid session_name window_index pane_index pa
 			prev_state=""
 			[ -f "$state_file" ] && prev_state=$(<"$state_file")
 
-			if [ "$prev_state" = "processing" ]; then
-				# processing → first low-CPU tick: transition to low_once
-				echo "low_once" > "$state_file"
-				save_meta "$local_id" "$project" "$location"
-			elif [ "$prev_state" = "low_once" ]; then
-				# Two consecutive low-CPU ticks → waiting (response completed)
-				echo "waiting" > "$state_file"
-				save_meta "$local_id" "$project" "$location"
-				save_done_at "$local_id"
-			fi
-			# If prev_state is waiting or empty, do nothing
+			case "$prev_state" in
+				processing)
+					if is_prompting "$local_id"; then
+						echo "prompting" > "$state_file"
+					else
+						echo "low_once" > "$state_file"
+					fi
+					save_meta "$local_id" "$project" "$location"
+					;;
+				low_once)
+					if is_prompting "$local_id"; then
+						echo "prompting" > "$state_file"
+					else
+						echo "waiting" > "$state_file"
+						save_done_at "$local_id"
+					fi
+					save_meta "$local_id" "$project" "$location"
+					;;
+				prompting)
+					if ! is_prompting "$local_id"; then
+						# プロンプトが消えた（ユーザーが応答した）→ デバウンスへ
+						echo "low_once" > "$state_file"
+						save_meta "$local_id" "$project" "$location"
+					fi
+					;;
+			esac
 		fi
 	else
 		# No Claude process found
 		prev_state=""
 		[ -f "$state_file" ] && prev_state=$(<"$state_file")
 
-		if [ "$prev_state" = "processing" ] || [ "$prev_state" = "low_once" ]; then
+		if [ "$prev_state" = "processing" ] || [ "$prev_state" = "low_once" ] || [ "$prev_state" = "prompting" ]; then
 			# processing/low_once → exited (process disappeared)
 			echo "exited" > "$state_file"
 			save_meta "$local_id" "$project" "$location"
@@ -162,6 +187,9 @@ for sf in "$state_dir"/*.state; do
 	case "$state" in
 		processing|low_once)
 			output+="🤖${project}(${location}) "
+			;;
+		prompting)
+			output+="💬${project}(${location}) "
 			;;
 		waiting)
 			# タイムアウトチェック
