@@ -114,10 +114,15 @@ while IFS=$'\t' read -r pane_id pane_pid session_name window_index pane_index pa
 		fi
 
 		if [ "$cpu" -gt "$CPU_THRESHOLD" ] 2>/dev/null; then
-			# Processing state
-			echo "processing" > "$state_file"
-			save_meta "$local_id" "$project" "$location"
-			rm -f "$done_file"
+			# CPU is high, but check if Claude is actually waiting for user input
+			if is_prompting "$local_id"; then
+				echo "prompting" > "$state_file"
+				save_meta "$local_id" "$project" "$location"
+			else
+				echo "processing" > "$state_file"
+				save_meta "$local_id" "$project" "$location"
+				rm -f "$done_file"
+			fi
 		else
 			# CPU below threshold
 			prev_state=""
